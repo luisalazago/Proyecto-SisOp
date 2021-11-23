@@ -77,6 +77,7 @@ int main(int argc, char *argv[]) {
     int port = 10000;
 	lectura = 0;
 	int rc = sqlite3_open("database.db", &db);
+	int schedule;
 
 	if(rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
@@ -93,8 +94,19 @@ int main(int argc, char *argv[]) {
 	    port = atoi(optarg);
 	    break;
 	default:
-	    fprintf(stderr, "usage: wserver [-d basedir] [-p port]\n");
+	    fprintf(stderr, "usage: wserver [-d basedir] [-p port] [-t threads] [-b buffers]\n");
 	    exit(1);
+	}
+
+	schedule = -1;
+	if(argc == 6) {
+		if(argv[5] == "SFF") schedule = 1;
+		else if(argv[5] == "FIFO") schedule = 0;
+		else {
+			printf("Error\n");
+			fprintf(stderr, "usage: wserver [-d basedir] [-p port] [-t threads] [-b buffers] SFF or FIFO\n");
+			exit(1);
+		}
 	}
 
     // run out of this directory
@@ -125,22 +137,28 @@ int main(int argc, char *argv[]) {
 				time_init[i] = time(NULL);
 				thread_state[i] = 0;
 			}
-			for(i = 0; i < THREAD; ++i) {
-				if(!thread_state[i]) {
-					thread_state[i] = 1;
-					Arguments ar;
-					ar.i = i;
-					ar.listen_fd = listen_fd; 
-					pthread_create(&request[i], NULL, http_thread, (Arguments *) &ar);
-					printf("\n###########################\n");
-					while(thread_state[i] != 2) printf("Ejecutando Hilo\n");
-					printf("\n###########################\n");
-					pthread_join(request[i], NULL);
-					time_end[i] = time(NULL);
-					printf("Termine el hilo Hijo nro: ");
-					printf(" %lld\n\n", request[i]);
-					data[i][0] = (lli) request[i]; data[i][1] = (lli) time_init[i]; data[i][2] = (lli) time_end[i];
+			if(!schedule) {
+				for(i = 0; i < THREAD; ++i) {
+					if(!thread_state[i]) {
+						thread_state[i] = 1;
+						Arguments ar;
+						ar.i = i;
+						ar.listen_fd = listen_fd; 
+						pthread_create(&request[i], NULL, http_thread, (Arguments *) &ar);
+						printf("\n###########################\n");
+						while(thread_state[i] != 2) printf("Ejecutando Hilo\n");
+						printf("\n###########################\n");
+						pthread_join(request[i], NULL);
+						time_end[i] = time(NULL);
+						printf("Termine el hilo Hijo nro: ");
+						printf(" %lld\n\n", request[i]);
+						data[i][0] = (lli) request[i]; data[i][1] = (lli) time_init[i]; data[i][2] = (lli) time_end[i];
+					}
 				}
+			}
+			else if(schedule) {
+				printf("Building shceduling :D\n");
+				exit(0);
 			}
 			lectura = 1;
 		}
@@ -208,8 +226,8 @@ void *server_manager(void* args){
 }
 
 void *http_thread(void* args){
-	int listen_fd = *((Arguments *) args)->listen_fd;
-	int i = *((Arguments *) args)->i;
+	int listen_fd = ((Arguments *) args)->listen_fd;
+	int i = ((Arguments *) args)->i;
 	printf("\nCree un proceso hijo\n");
 	struct sockaddr_in client_addr;
 	int client_len = sizeof(client_addr);
