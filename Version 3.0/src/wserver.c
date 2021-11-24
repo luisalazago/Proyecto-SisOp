@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <errno.h>
@@ -15,7 +16,7 @@
 #define SIZE (NUM * sizeof(int))
 #define lli long long int
 #define THREAD 10
-#define MAXBUF (8192)
+#define quatum_time 5
 
 typedef struct {
 	int i;
@@ -28,7 +29,7 @@ int lectura; //Flag para evitar el race condition
 sqlite3 *db; //Base de datos
 
 lli data[THREAD][3]; //Datos a guardar en la memoria data[0] = pthread_t, data[1] = time init, data[2] = time_end
-int thread_state[THREAD]; //Estados de los hilos.
+int thread_state[THREAD]; //Estados de los hilos para FIFO.
 
 static int callback(void *NotUsed, int argc, char **argv, char **azColNAme);
 
@@ -36,7 +37,9 @@ int insert_database();
 
 void *server_manager(void* args); //Hilo encargado del server manager
 
-void *http_thread(void* args); //Hilo creador de las peticiones http;
+void *http_thread(void* args); //Hilo creador de peticiones http para el scheduler FIFO.
+
+void *http_thread1(void* args); //Hilo creador de peticiones http para el scheduler SJF.
 
 int get_fd(int listen_fd);
 
@@ -69,7 +72,7 @@ int main(int argc, char *argv[]) {
 
 	schedule = -1;
 	if(argc == 6) {
-		if(argv[5] == "SFF") schedule = 1;
+		if(argv[5] == "SJF") schedule = 1;
 		else if(argv[5] == "FIFO") schedule = 0;
 		else {
 			printf("Error\n");
@@ -82,8 +85,8 @@ int main(int argc, char *argv[]) {
     chdir_or_die(root_dir);
 	
     // now, get to work
-	char files_request[10][MAXBUF];
-	int files_value[10];
+	int value_request[10];
+	pthread_t temp[1];
 	time_t time_init[THREAD];
 	time_t time_end[THREAD];
 	pthread_t request[THREAD];
@@ -99,11 +102,13 @@ int main(int argc, char *argv[]) {
 
 	while (1) {
 		if(!lectura){
-			int i;
+			int i, j, temp2, k;
+			srand(time(NULL));
 			for(i = 0; i < THREAD; ++i){
 				//Creación de los hilos y sus estados.
 				time_init[i] = time(NULL);
-				thread_state[i] = 0;
+				if(!schedule) thread_state[i] = 0;
+				else if(schedule) value_request[i] = rand() % 10;
 			}
 			if(!schedule) {
 				for(i = 0; i < THREAD; ++i) {
@@ -125,13 +130,36 @@ int main(int argc, char *argv[]) {
 				}
 			}
 			else if(schedule) {
-				printf("Building shceduling :D\n");
-				for(i = 0; i < THREAD; ++i) {
-					listen_fd = get_fd(listen_fd);
-					order_files(listen_fd, files_request, files_value, i);
-				}
-				for(i = 0; i < THREAD; ++i) {
-					
+				k = 0;
+				while(k < 2) {
+					for(i = 0; i < THREAD; ++i) {
+						if(!k) {
+							//Order the threads based on the value got random.
+							for(j = 0; j < THREAD; ++j) {
+								if(value_request[j] < value_request[i]) {
+									temp[0] = request[i];
+									request[i] = request[j];
+									request[j] = temp[0];
+									temp2 = value_request[i];
+									value_request[i] = value_request[j];
+									value_request[j] = temp2;
+								}
+							}
+						}
+						else {
+							//Process the threads pre-ordered.
+							pthread_create(&request[i], NULL, http_thread1, (int *) &listen_fd);
+							printf("\n###########################\n");
+							printf("Ejecutando Hilo\n");
+							printf("\n###########################\n");
+							pthread_join(request[i], NULL);
+							time_end[i] = time(NULL);
+							printf("Termine el hilo Hijo nro: ");
+							printf(" %lld\n\n", request[i]);
+							data[i][0] = (lli) request[i]; data[i][1] = (lli) time_init[i]; data[i][2] = (lli) time_end[i];
+						}
+					}
+					k += 1
 				}
 			}
 			lectura = 1;
@@ -181,10 +209,10 @@ void *server_manager(void* args){
 	pthread_exit(0);
 }
 
-void *http_thread(void* args){
+void *http_thread(void* args) {
 	int listen_fd = ((Arguments *) args)->listen_fd;
 	int i = ((Arguments *) args)->i;
-	printf("\nCree un proceso hijo\n");
+	printf("\nCree un Hilo hijo\n");
 	struct sockaddr_in client_addr;
 	int client_len = sizeof(client_addr);
 	int conn_fd = accept_or_die(listen_fd, (sockaddr_t *) &client_addr, (socklen_t *) &client_len);
@@ -194,9 +222,13 @@ void *http_thread(void* args){
 	pthread_exit(0);
 }
 
-int get_fd(int listen_fd) {
+void *http_thread1(void* args) {
+	int listen_fd = *((int *) args)->listen_fd;
+	printf("\nCree un Hilo hijo\n");
 	struct sockaddr_in client_addr;
 	int client_len = sizeof(client_addr);
 	int conn_fd = accept_or_die(listen_fd, (sockaddr_t *) &client_addr, (socklen_t *) &client_len);
-	return conn_fd;
+	request_handle(conn_fd);
+	close_or_die(conn_fd);
+	pthread_exit(0);
 }
