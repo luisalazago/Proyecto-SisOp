@@ -86,9 +86,9 @@ int main(int argc, char *argv[]) {
 	
     // now, get to work
 	int value_request[10];
-	pthread_t temp[1];
 	time_t time_init[THREAD];
 	time_t time_end[THREAD];
+	pthread_t temp[1];
 	pthread_t request[THREAD];
     int listen_fd = open_listen_fd_or_die(port);
 	pthread_t manager;
