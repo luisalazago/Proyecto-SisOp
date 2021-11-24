@@ -15,11 +15,12 @@
 #define SIZE (NUM * sizeof(int))
 #define lli long long int
 #define THREAD 10
+#define MAXBUF (8192)
 
 typedef struct {
 	int i;
 	int listen_fd;
-} Arguments;
+} Arguments; //Argumentos que se pasan a la función del manejo de hilos.
 
 char default_root[] = ".";
 
@@ -27,7 +28,7 @@ int lectura; //Flag para evitar el race condition
 sqlite3 *db; //Base de datos
 
 lli data[THREAD][3]; //Datos a guardar en la memoria data[0] = pthread_t, data[1] = time init, data[2] = time_end
-int thread_state[THREAD];
+int thread_state[THREAD]; //Estados de los hilos.
 
 static int callback(void *NotUsed, int argc, char **argv, char **azColNAme);
 
@@ -37,39 +38,7 @@ void *server_manager(void* args); //Hilo encargado del server manager
 
 void *http_thread(void* args); //Hilo creador de las peticiones http;
 
-// int share_memory(pid_t pid, time_t time_init, time_t time_end){
-// 	int fd = shm_open(NAME, O_CREAT | O_EXCL | O_RDWR, 0600);
-// 	if(fd < 0)
-// 		return EXIT_FAILURE;
-	
-// 	ftruncate(fd, SIZE);
-
-// 	int *data = (int *)mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-// 	data[0] = (int)pid; data[1] = (int)time_init; data[2] = (int)time_end;
-
-// 	munmap(data, SIZE);
-// 	close(fd);
-// 	return EXIT_SUCCESS;
-// }
-
-// int get_memory(sqlite3 *db){
-// 	int fd = shm_open(NAME, O_RDONLY, 0666);
-// 	if(fd < 0)
-// 		return EXIT_FAILURE;
-	
-// 	int *data = (int *)mmap(0, SIZE, PROT_READ, MAP_SHARED, fd, 0);
-// 	//Codigo para ponerlo en sqllite
-// 	if(insert_database(data, db))
-// 		printf("Error al cargar la base de datos\n");
-
-// 	munmap(data, SIZE);
-// 	close(fd);
-// 	shm_unlink(NAME);
-// 	return EXIT_SUCCESS;
-// }
-//
-// ./wserver [-d <basedir>] [-p <portnum>] 
-// 
+int get_fd(int listen_fd);
 
 int main(int argc, char *argv[]) {
     int c;
@@ -111,11 +80,10 @@ int main(int argc, char *argv[]) {
 
     // run out of this directory
     chdir_or_die(root_dir);
-
-	// now, open conection to the database
 	
-
     // now, get to work
+	char files_request[10][MAXBUF];
+	int files_value[10];
 	time_t time_init[THREAD];
 	time_t time_end[THREAD];
 	pthread_t request[THREAD];
@@ -133,7 +101,7 @@ int main(int argc, char *argv[]) {
 		if(!lectura){
 			int i;
 			for(i = 0; i < THREAD; ++i){
-				//Creación de los hilos htpps que llegan
+				//Creación de los hilos y sus estados.
 				time_init[i] = time(NULL);
 				thread_state[i] = 0;
 			}
@@ -158,7 +126,13 @@ int main(int argc, char *argv[]) {
 			}
 			else if(schedule) {
 				printf("Building shceduling :D\n");
-				exit(0);
+				for(i = 0; i < THREAD; ++i) {
+					listen_fd = get_fd(listen_fd);
+					order_files(listen_fd, files_request, files_value, i);
+				}
+				for(i = 0; i < THREAD; ++i) {
+					
+				}
 			}
 			lectura = 1;
 		}
@@ -179,24 +153,6 @@ static int callback(void *NotUsed, int argc, char **argv, char **azColNAme){
 int insert_database(int i){
 	char *err_msg = 0;
 	int rc;
-
-	// printf("Estoy revisando la creacion %d\n", rc);
-	// if(rc != SQLITE_OK) {
-	// 	fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-	// 	sqlite3_close(db);
-	// 	return 1;
-	// }
-
-	// char *sql_c = "CREATE TABLE Request(pid INT, time_init INT, time_end INT);";
-	
-	// rc= sqlite3_exec(db, sql_c, 0, 0, &err_msg);
-	// printf("Estoy revisando la Tablar %d\n", rc);
-	// if(rc != SQLITE_OK) {
-	// 	fprintf(stderr, "Cannot create database: %s\n", err_msg);
-	// 	sqlite3_close(db);
-	// 	return 1;
-	// }
-
 	char sql_i[500];
 	sprintf(sql_i, "INSERT INTO Request (pid, time_init, time_end) VALUES(%lld, %lld, %lld);", data[i][0], data[i][1], data[i][2]);
 	rc= sqlite3_exec(db, sql_i, callback, 0, &err_msg);
@@ -236,4 +192,11 @@ void *http_thread(void* args){
 	close_or_die(conn_fd);
 	thread_state[i] = 2;
 	pthread_exit(0);
+}
+
+int get_fd(int listen_fd) {
+	struct sockaddr_in client_addr;
+	int client_len = sizeof(client_addr);
+	int conn_fd = accept_or_die(listen_fd, (sockaddr_t *) &client_addr, (socklen_t *) &client_len);
+	return conn_fd;
 }

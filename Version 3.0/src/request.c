@@ -135,6 +135,36 @@ void request_serve_static(int fd, char *filename, int filesize) {
     munmap_or_die(srcp, filesize);
 }
 
+// order files
+void order_files(int fd, char** files_request, int* files_value, int i) {
+    int is_static, j, is_value, temp2, k;
+    struct stat sbuf;
+    char buf[MAXBUF], method[MAXBUF], uri[MAXBUF], version[MAXBUF];
+    char filename[MAXBUF], cgiargs[MAXBUF];
+    char temp[1][MAXBUF];
+    readline_or_die(fd, buf, MAXBUF);
+    sscanf(buf, "%s %s %s", method, uri, version);
+
+    is_static = request_parse_uri(uri, filename, cgiargs);
+    is_value = stat(filename, &sbuf);
+    for(k = 0; k < i + 1; ++k) {
+        if(is_value < files_value[k]) {
+            temp[0] = files_request[k];
+            temp2 = files_value[k];
+            files_request[k] = filename;
+            files_value[k] = is_value;
+            for(j = k; j < i + 1; ++j) {
+                files_request[j] = temp[0];
+                files_value[j] = temp2;
+                if(j != i) {
+                    temp[0] = files_request[j + 1];
+                    temp2 = files_value[j + 1];
+                }
+            }
+        }
+    }
+}
+
 // handle a request
 void request_handle(int fd) {
     int is_static;
