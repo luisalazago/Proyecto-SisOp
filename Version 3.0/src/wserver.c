@@ -70,16 +70,19 @@ int main(int argc, char *argv[]) {
 	    exit(1);
 	}
 
+	printf("Mama mia %d\n", argc);
 	schedule = -1;
 	if(argc == 6) {
-		if(argv[5] == "SJF") schedule = 1;
-		else if(argv[5] == "FIFO") schedule = 0;
+		if(!strcmp(argv[5], "SFF")) schedule = 1;
+		else if(!strcmp(argv[5], "FIFO")) schedule = 0;
 		else {
 			printf("Error\n");
 			fprintf(stderr, "usage: wserver [-d basedir] [-p port] [-t threads] [-b buffers] SFF or FIFO\n");
 			exit(1);
 		}
 	}
+
+	else {schedule = 1;}
 
     // run out of this directory
     chdir_or_die(root_dir);
@@ -159,7 +162,7 @@ int main(int argc, char *argv[]) {
 							data[i][0] = (lli) request[i]; data[i][1] = (lli) time_init[i]; data[i][2] = (lli) time_end[i];
 						}
 					}
-					k += 1
+					k += 1;
 				}
 			}
 			lectura = 1;
@@ -223,7 +226,7 @@ void *http_thread(void* args) {
 }
 
 void *http_thread1(void* args) {
-	int listen_fd = *((int *) args)->listen_fd;
+	int listen_fd = *((int*) args);
 	printf("\nCree un Hilo hijo\n");
 	struct sockaddr_in client_addr;
 	int client_len = sizeof(client_addr);
