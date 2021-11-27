@@ -73,11 +73,11 @@ int main(int argc, char *argv[]) {
 	printf("Mama mia %d\n", argc);
 	schedule = -1;
 	if(argc == 6) {
-		if(!strcmp(argv[5], "SFF")) schedule = 1;
+		if(!strcmp(argv[5], "SJF")) schedule = 1;
 		else if(!strcmp(argv[5], "FIFO")) schedule = 0;
 		else {
 			printf("Error\n");
-			fprintf(stderr, "usage: wserver [-d basedir] [-p port] [-t threads] [-b buffers] SFF or FIFO\n");
+			fprintf(stderr, "usage: wserver [-d basedir] [-p port] [-t threads] [-b buffers] SJF or FIFO\n");
 			exit(1);
 		}
 	}
