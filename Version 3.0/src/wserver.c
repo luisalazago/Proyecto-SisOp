@@ -13,9 +13,8 @@
 
 #define NAME "/dory"
 #define NUM 3
-#define SIZE (NUM * sizeof(int))
 #define lli long long int
-#define THREAD 10
+#define SIZE (NUM * sizeof(long long int))
 #define quatum_time 5
 
 typedef struct {
@@ -28,8 +27,8 @@ char default_root[] = ".";
 int lectura; //Flag para evitar el race condition
 sqlite3 *db; //Base de datos
 
-lli data[THREAD][3]; //Datos a guardar en la memoria data[0] = pthread_t, data[1] = time init, data[2] = time_end
-int thread_state[THREAD]; //Estados de los hilos para FIFO.
+lli **data; //Datos a guardar en la memoria data[0] = pthread_t, data[1] = time init, data[2] = time_end
+int *thread_state; //Estados de los hilos para FIFO.
 
 static int callback(void *NotUsed, int argc, char **argv, char **azColNAme);
 
@@ -44,7 +43,7 @@ void *http_thread1(void* args); //Hilo creador de peticiones http para el schedu
 int get_fd(int listen_fd);
 
 int main(int argc, char *argv[]) {
-    int c;
+    int c, THREAD = 1;
     char *root_dir = default_root;
     int port = 10000;
 	lectura = 0;
@@ -72,9 +71,10 @@ int main(int argc, char *argv[]) {
 
 	printf("Mama mia %d\n", argc);
 	schedule = -1;
-	if(argc == 6) {
-		if(!strcmp(argv[5], "SJF")) schedule = 1;
-		else if(!strcmp(argv[5], "FIFO")) schedule = 0;
+	if(argc >= 9) {
+		THREAD = argv[6];
+		if(!strcmp(argv[8], "SJF")) schedule = 1;
+		else if(!strcmp(argv[8], "FIFO")) schedule = 0;
 		else {
 			printf("Error\n");
 			fprintf(stderr, "usage: wserver [-d basedir] [-p port] [-t threads] [-b buffers] SJF or FIFO\n");
@@ -83,6 +83,15 @@ int main(int argc, char *argv[]) {
 	}
 
 	else {schedule = 1;}
+
+	// sizing the data and the states of the threads
+
+	data = (lli**) malloc(THREAD * sizeof(lli*));
+	for(i = 0; i < NUM; ++i) {
+		data[i] = (lli*) malloc(SIZE);
+	}
+
+	thread_state = (int*) malloc(THREAD * sizeof(int));
 
     // run out of this directory
     chdir_or_die(root_dir);
@@ -169,6 +178,15 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	sqlite3_close(db);
+
+	// free the memory used
+	for(i = 0; i < NUM; ++i) {
+		free(data[i]);
+	}
+	free(data);
+	
+	free(thread_state);
+
     return 0;
 }
 
