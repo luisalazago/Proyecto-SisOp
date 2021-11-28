@@ -14,7 +14,7 @@
 #define NAME "/dory"
 #define NUM 3
 #define lli long long int
-#define SIZE (NUM * sizeof(long long int))
+#define SIZE (NUM * sizeof(int))
 #define quatum_time 5
 
 typedef struct {
@@ -43,12 +43,18 @@ void *http_thread1(void* args); //Hilo creador de peticiones http para el schedu
 int get_fd(int listen_fd);
 
 int main(int argc, char *argv[]) {
-    int c, THREAD = 1;
+    int c, THREAD = 1, i;
     char *root_dir = default_root;
     int port = 10000;
 	lectura = 0;
 	int rc = sqlite3_open("database.db", &db);
 	int schedule;
+
+	//Dinamic Values
+	int* value_request;
+	time_t* time_init;
+	time_t* time_end;
+	pthread_t* request;
 
 	if(rc != SQLITE_OK) {
 		fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
@@ -70,9 +76,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	printf("Mama mia %d\n", argc);
-	schedule = -1;
-	if(argc >= 9) {
-		THREAD = argv[6];
+	schedule = 1;
+	if(argc == 9) {
+		sscanf(argv[6], "%d", &THREAD);
+
 		if(!strcmp(argv[8], "SJF")) schedule = 1;
 		else if(!strcmp(argv[8], "FIFO")) schedule = 0;
 		else {
@@ -82,29 +89,27 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	else {schedule = 1;}
-
 	// sizing the data and the states of the threads
 
 	data = (lli**) malloc(THREAD * sizeof(lli*));
-	for(i = 0; i < NUM; ++i) {
-		data[i] = (lli*) malloc(SIZE);
+	for(i = 0; i < THREAD; ++i) {
+		data[i] = (lli*) malloc(NUM * sizeof(lli));
 	}
-
+	printf("hello pana %s %d\n", argv[6], THREAD);
 	thread_state = (int*) malloc(THREAD * sizeof(int));
-
+	value_request = (int*) malloc(THREAD * sizeof(int));
+	time_init = (time_t*) malloc(THREAD * sizeof(time_t));
+	time_end = (time_t*) malloc(THREAD * sizeof(time_t));
+	request = (pthread_t*) malloc(THREAD * sizeof(pthread_t));
     // run out of this directory
+
     chdir_or_die(root_dir);
 	
     // now, get to work
-	int value_request[10];
-	time_t time_init[THREAD];
-	time_t time_end[THREAD];
 	pthread_t temp[1];
-	pthread_t request[THREAD];
     int listen_fd = open_listen_fd_or_die(port);
 	pthread_t manager;
-	pthread_create(&manager, NULL, server_manager, NULL);
+	pthread_create(&manager, NULL, server_manager, (int *) &THREAD);
 
 	/* Thread States:
 	0 = recien creado,
@@ -187,6 +192,11 @@ int main(int argc, char *argv[]) {
 	
 	free(thread_state);
 
+	free(value_request);
+	free(time_init);
+	free(time_end);
+	free(request);
+
     return 0;
 }
 
@@ -217,8 +227,10 @@ int insert_database(int i){
 }
 
 void *server_manager(void* args){
+	int THREAD = *((int*) args);
 	while(1){
 		if(lectura){
+			printf("hay manito entre %d\n", THREAD);
 			int i;
 			for(i = 0; i < THREAD; ++i){
 				if(!insert_database(i))
